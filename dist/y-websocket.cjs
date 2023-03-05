@@ -187,6 +187,9 @@ const setupWS = (provider) => {
       provider.emit('status', [{
         status: 'connected'
       }]);
+
+      provider.sendAuthToken();
+
       // always send sync step 1 when connected
       const encoder = encoding.createEncoder();
       encoding.writeVarUint(encoder, messageSync);
@@ -380,26 +383,14 @@ class WebsocketProvider extends observable.Observable {
     if (connect) {
       this.connect();
     }
-
+    /**
+     * @type {string}
+     */
     this._authToken = '';
-    // send auth token
-    this._authTokenInterval = setInterval(() => {
-      // string -> uint8array
-      const token = this._authToken;
-      const result = [];
-      for (var i = 0; i < token.length; i += 2) {
-        result.push(parseInt(token.substring(i, i + 2), 16));
-      }
-      const content = Uint8Array.from(result);
-
-      const encoder = encoding.createEncoder();
-      encoding.writeVarUint(encoder, messageAuth);
-      syncProtocol.writeUpdate(encoder, content);
-      const buffer = encoding.toUint8Array(encoder);
-
-      console.log('auth token', token, buffer);
-      this.ws?.send(buffer);
-    }, 5 * 1000);
+    /**
+     * @type {NodeJS.Timer}
+     */
+    this._authTokenInterval = setInterval(() => { }, 1000 * 1000);
   }
 
   /**
@@ -411,6 +402,7 @@ class WebsocketProvider extends observable.Observable {
   }
   set authToken(token) {
     this._authToken = token;
+    this.sendAuthToken();
   }
 
   /**
@@ -428,12 +420,43 @@ class WebsocketProvider extends observable.Observable {
     }
   }
 
+  sendAuthToken() {
+    clearInterval(this._authTokenInterval);
+
+    const token = this._authToken;
+
+    const numArr = [];
+    for (let i = 0, tokenLength = token.length; i < tokenLength; ++i) {
+      numArr.push(token.charCodeAt(i));
+    }
+    const uint8Arr = Uint8Array.from(numArr);
+
+    const encoder = encoding.createEncoder();
+    encoding.writeVarUint(encoder, messageAuth);
+    encoding.writeVarUint8Array(encoder, uint8Arr);
+    const buffer = encoding.toUint8Array(encoder);
+
+    if (this.wsconnected) {
+      this.ws?.send(buffer);
+      console.log('sent auth token', token, buffer);
+    } else {
+      this._authTokenInterval = setInterval(() => {
+        if (this.wsconnected) {
+          this.ws?.send(buffer);
+          console.log('sent auth token', token, buffer);
+          clearInterval(this._authTokenInterval);
+        }
+      }, 1 * 1000);
+    }
+  }
+
   destroy() {
+    clearInterval(this._authTokenInterval);
+
     if (this._resyncInterval !== 0) {
       clearInterval(this._resyncInterval);
     }
     clearInterval(this._checkInterval);
-    clearInterval(this._authTokenInterval);
     this.disconnect();
     if (typeof window !== 'undefined') {
       window.removeEventListener('unload', this._unloadHandler);

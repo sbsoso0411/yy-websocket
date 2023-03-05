@@ -1,7 +1,7 @@
 {
-  "name": "y-websocket",
-  "version": "1.4.6",
-  "description": "Websockets provider for Yjs",
+  "name": "sb-yy-websocket",
+  "version": "1.0.7",
+  "description": "Websockets provider for Yjs with auth token",
   "main": "./dist/y-websocket.cjs",
   "module": "./src/y-websocket.js",
   "types": "./dist/src/y-websocket.d.ts",
@@ -18,8 +18,8 @@
     "preversion": "npm run lint && npm run dist && test -e dist/src/y-websocket.d.ts && test -e dist/y-websocket.cjs"
   },
   "bin": {
-    "y-websocket-server": "./bin/server.js",
-    "y-websocket": "./bin/server.js"
+    "sb-yy-websocket-server": "./bin/server.js",
+    "sb-yy-websocket": "./bin/server.js"
   },
   "files": [
     "dist/*",
@@ -38,7 +38,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/yjs/y-websocket.git"
+    "url": "git+https://github.com/sbsoso0411/yy-websocket.git"
   },
   "keywords": [
     "Yjs"
@@ -46,9 +46,9 @@
   "author": "Kevin Jahns <kevin.jahns@protonmail.com>",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/yjs/y-websocket/issues"
+    "url": "https://github.com/sbsoso0411/yy-websocket/issues"
   },
-  "homepage": "https://github.com/yjs/y-websocket#readme",
+  "homepage": "https://github.com/sbsoso0411/yy-websocket#readme",
   "standard": {
     "ignore": [
       "/dist",

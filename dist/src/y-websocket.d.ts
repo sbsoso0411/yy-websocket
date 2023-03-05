@@ -96,7 +96,13 @@ export class WebsocketProvider extends Observable<string> {
     _awarenessUpdateHandler: ({ added, updated, removed }: any, _origin: any) => void;
     _unloadHandler: () => void;
     _checkInterval: any;
+    /**
+     * @type {string}
+     */
     _authToken: string;
+    /**
+     * @type {NodeJS.Timer}
+     */
     _authTokenInterval: NodeJS.Timer;
     set authToken(arg: string);
     /**
@@ -108,6 +114,7 @@ export class WebsocketProvider extends Observable<string> {
      * @type {boolean}
      */
     get synced(): boolean;
+    sendAuthToken(): void;
     connectBc(): void;
     disconnectBc(): void;
     disconnect(): void;
