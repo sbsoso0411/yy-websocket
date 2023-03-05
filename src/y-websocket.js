@@ -436,12 +436,10 @@ export class WebsocketProvider extends Observable {
 
     if (this.wsconnected) {
       this.ws?.send(buffer)
-      console.log('sent auth token', token, buffer)
     } else {
       this._authTokenInterval = setInterval(() => {
         if (this.wsconnected) {
           this.ws?.send(buffer)
-          console.log('sent auth token', token, buffer)
           clearInterval(this._authTokenInterval)
         }
       }, 1 * 1000)
