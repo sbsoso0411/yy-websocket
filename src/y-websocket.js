@@ -197,7 +197,10 @@ const setupWS = (provider) => {
         status: 'connected'
       }])
 
+      /*-------- sb-yy-websocket change begin --------*/
+      // send auth token when the socket is connected to the yjs-server
       provider.sendAuthToken()
+      /*-------- sb-yy-websocket change end --------*/
 
       // always send sync step 1 when connected
       const encoder = encoding.createEncoder()
@@ -392,27 +395,33 @@ export class WebsocketProvider extends Observable {
     if (connect) {
       this.connect()
     }
+    /*-------- sb-yy-websocket change begin --------*/
+    // add props to the WebSocketProvider for auth token handling
     /**
      * @type {string}
      */
     this._authToken = ''
     /**
-     * @type {NodeJS.Timer}
+     * @type {NodeJS.Timer | null}
      */
-    this._authTokenInterval = setInterval(() => { }, 1000 * 1000)
+    this._authTokenInterval = null
+    /*-------- sb-yy-websocket change end --------*/
   }
 
+  /*-------- sb-yy-websocket change begin --------*/
+  // get, set methods for private prop "_authToken"
   /**
    * @type {string}
    */
   get authToken() {
     return this._authToken
-
   }
   set authToken(token) {
     this._authToken = token
+    // send auth token to the yjs-server when it's reset
     this.sendAuthToken()
   }
+  /*-------- sb-yy-websocket change end --------*/
 
   /**
    * @type {boolean}
@@ -428,11 +437,12 @@ export class WebsocketProvider extends Observable {
     }
   }
 
+  /*-------- sb-yy-websocket change begin --------*/
+  // method which sends "_authToken" to the yjs-server
   sendAuthToken() {
-    clearInterval(this._authTokenInterval)
+    this._authTokenInterval && clearInterval(this._authTokenInterval)
 
     const token = this._authToken
-
     const numArr = []
     for (let i = 0, tokenLength = token.length; i < tokenLength; ++i) {
       numArr.push(token.charCodeAt(i))
@@ -450,14 +460,17 @@ export class WebsocketProvider extends Observable {
       this._authTokenInterval = setInterval(() => {
         if (this.wsconnected) {
           this.ws?.send(buffer)
-          clearInterval(this._authTokenInterval)
+          this._authTokenInterval && clearInterval(this._authTokenInterval)
         }
       }, 1 * 1000)
     }
   }
+  /*-------- sb-yy-websocket change end --------*/
 
   destroy() {
-    clearInterval(this._authTokenInterval)
+    /*-------- sb-yy-websocket change begin --------*/
+    this._authTokenInterval && clearInterval(this._authTokenInterval)
+    /*-------- sb-yy-websocket change end --------*/
 
     if (this._resyncInterval !== 0) {
       clearInterval(this._resyncInterval)
