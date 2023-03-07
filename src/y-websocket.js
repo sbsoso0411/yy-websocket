@@ -20,6 +20,8 @@ export const messageSync = 0
 export const messageQueryAwareness = 3
 export const messageAwareness = 1
 export const messageAuth = 2
+export const messageDoc = 9
+export const messageError = 500
 
 /**
  *                       encoder,          decoder,          provider,          emitSynced, messageType
@@ -137,9 +139,23 @@ const setupWS = (provider) => {
 
     websocket.onmessage = (event) => {
       provider.wsLastMessageReceived = time.getUnixTime()
-      const encoder = readMessage(provider, new Uint8Array(event.data), true)
-      if (encoding.length(encoder) > 1) {
-        websocket.send(encoding.toUint8Array(encoder))
+
+      const buf = new Uint8Array(event.data)
+      const decoder = decoding.createDecoder(buf)
+      const messageType = decoding.readVarUint(decoder)
+      if (messageType === messageError) {
+        const content = decoding.readVarUint8Array(decoder)
+        const errorType = String.fromCharCode(...content)
+        provider.emit('error', [errorType])
+      } else if (messageType === messageDoc) {
+        const content = decoding.readVarUint8Array(decoder)
+        const doc = String.fromCharCode(...content)
+        provider.emit('doc', [doc])
+      } else {
+        const encoder = readMessage(provider, new Uint8Array(event.data), true)
+        if (encoding.length(encoder) > 1) {
+          websocket.send(encoding.toUint8Array(encoder))
+        }
       }
     }
     websocket.onerror = (event) => {
@@ -409,7 +425,6 @@ export class WebsocketProvider extends Observable {
   get synced() {
     return this._synced
   }
-
   set synced(state) {
     if (this._synced !== state) {
       this._synced = state
