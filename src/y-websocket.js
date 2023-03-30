@@ -143,13 +143,16 @@ const setupWS = (provider) => {
       const buf = new Uint8Array(event.data)
       const decoder = decoding.createDecoder(buf)
       const messageType = decoding.readVarUint(decoder)
+      /*-------- sb-yy-websocket change begin --------*/
       if (messageType === messageError) {
         const content = decoding.readVarUint8Array(decoder)
         const errorType = String.fromCharCode(...content)
         provider.emit('error', [errorType])
       } else if (messageType === messageInit) {
         provider.emit('init', [])
-      } else {
+      }
+      /*-------- sb-yy-websocket change end --------*/
+      else {
         const encoder = readMessage(provider, new Uint8Array(event.data), true)
         if (encoding.length(encoder) > 1) {
           websocket.send(encoding.toUint8Array(encoder))
