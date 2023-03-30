@@ -20,6 +20,7 @@ export const messageSync = 0
 export const messageQueryAwareness = 3
 export const messageAwareness = 1
 export const messageAuth = 2
+export const messageInit = 4
 export const messageError = 500
 
 /**
@@ -146,6 +147,8 @@ const setupWS = (provider) => {
         const content = decoding.readVarUint8Array(decoder)
         const errorType = String.fromCharCode(...content)
         provider.emit('error', [errorType])
+      } else if (messageType === messageInit) {
+        provider.emit('init', [])
       } else {
         const encoder = readMessage(provider, new Uint8Array(event.data), true)
         if (encoding.length(encoder) > 1) {
