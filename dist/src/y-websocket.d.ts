@@ -2,6 +2,8 @@ export const messageSync: 0;
 export const messageQueryAwareness: 3;
 export const messageAwareness: 1;
 export const messageAuth: 2;
+export const messageInit: 4;
+export const messageError: 500;
 /**
  * Websocket Provider for Yjs. Creates a websocket connection to sync the shared document.
  * The document name is attached to the provided url. I.e. the following example
@@ -20,6 +22,7 @@ export class WebsocketProvider extends Observable<string> {
      * @param {string} serverUrl
      * @param {string} roomname
      * @param {Y.Doc} doc
+     * @param {string} docId
      * @param {object} opts
      * @param {boolean} [opts.connect]
      * @param {awarenessProtocol.Awareness} [opts.awareness]
@@ -29,7 +32,7 @@ export class WebsocketProvider extends Observable<string> {
      * @param {number} [opts.maxBackoffTime] Maximum amount of time to wait before trying to reconnect (we try to reconnect using exponential backoff)
      * @param {boolean} [opts.disableBc] Disable cross-tab BroadcastChannel communication
      */
-    constructor(serverUrl: string, roomname: string, doc: Y.Doc, { connect, awareness, params, WebSocketPolyfill, resyncInterval, maxBackoffTime, disableBc }?: {
+    constructor(serverUrl: string, roomname: string, doc: Y.Doc, docId: string, { connect, awareness, params, WebSocketPolyfill, resyncInterval, maxBackoffTime, disableBc }?: {
         connect: boolean;
         awareness: awarenessProtocol.Awareness;
         params: {
@@ -45,6 +48,7 @@ export class WebsocketProvider extends Observable<string> {
     url: string;
     roomname: string;
     doc: Y.Doc;
+    docId: string;
     _WS: {
         new (url: string, protocols?: string | string[] | undefined): WebSocket;
         prototype: WebSocket;
@@ -101,9 +105,9 @@ export class WebsocketProvider extends Observable<string> {
      */
     _authToken: string;
     /**
-     * @type {NodeJS.Timer}
+     * @type {NodeJS.Timer | null}
      */
-    _authTokenInterval: NodeJS.Timer;
+    _authTokenInterval: NodeJS.Timer | null;
     set authToken(arg: string);
     /**
      * @type {string}

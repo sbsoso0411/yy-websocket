@@ -5,6 +5,7 @@ Object.defineProperty(exports, '__esModule', { value: true });
 var bc = require('lib0/dist/broadcastchannel.cjs');
 var decoding = require('lib0/dist/decoding.cjs');
 var encoding = require('lib0/dist/encoding.cjs');
+var idb = require('lib0/dist/indexeddb.js.cjs');
 var math = require('lib0/dist/math.cjs');
 var observable = require('lib0/dist/observable.cjs');
 var time = require('lib0/dist/time.cjs');
@@ -12,7 +13,7 @@ var url = require('lib0/dist/url.cjs');
 var authProtocol = require('y-protocols/dist/auth.cjs');
 var awarenessProtocol = require('y-protocols/dist/awareness.cjs');
 var syncProtocol = require('y-protocols/dist/sync.cjs');
-require('yjs');
+var Y = require('yjs');
 
 /**
  * @module provider/websocket
@@ -22,6 +23,8 @@ const messageSync = 0;
 const messageQueryAwareness = 3;
 const messageAwareness = 1;
 const messageAuth = 2;
+const messageInit = 4;
+const messageError = 500;
 
 /**
  *                       encoder,          decoder,          provider,          emitSynced, messageType
@@ -137,11 +140,62 @@ const setupWS = (provider) => {
     provider.wsconnected = false;
     provider.synced = false;
 
-    websocket.onmessage = (event) => {
+    websocket.onmessage = async (event) => {
       provider.wsLastMessageReceived = time.getUnixTime();
-      const encoder = readMessage(provider, new Uint8Array(event.data), true);
-      if (encoding.length(encoder) > 1) {
-        websocket.send(encoding.toUint8Array(encoder));
+
+      const buf = new Uint8Array(event.data);
+      const decoder = decoding.createDecoder(buf);
+      const messageType = decoding.readVarUint(decoder);
+      /*-------- sb-yy-websocket change begin --------*/
+      if (messageType === messageError) {
+        const content = decoding.readVarUint8Array(decoder);
+        const errorType = String.fromCharCode(...content);
+        provider.emit('error', [errorType]);
+      } else if (messageType === messageInit) {
+        const buf = new Uint8Array(event.data);
+        buf[0] = messageSync;
+
+        const encoder = readMessage(provider, buf, false);
+        if (encoding.length(encoder) > 1) {
+          websocket.send(encoding.toUint8Array(encoder));
+        }
+
+        try {
+          let hasOfflineEdits = false;
+          const db = await idb.openDB(provider.docId, (_db) => {
+            if (_db.objectStoreNames.length === 1 && _db.objectStoreNames[0] === 'updates') {
+              hasOfflineEdits = true;
+            }
+            return _db
+          });
+          if (hasOfflineEdits) {
+            const [updatesStore] = idb.transact(db, ['updates']);
+            const updates = await idb.getAll(updatesStore);
+            if (updates.length !== 0) {
+              updates.forEach(update => {
+                Y.applyUpdate(provider.doc, update);
+
+                const encoder = encoding.createEncoder();
+                encoding.writeVarUint(encoder, messageSync);
+                syncProtocol.writeUpdate(encoder, update);
+                broadcastMessage(provider, encoding.toUint8Array(encoder));
+              });
+              console.log('synced offline edits and deleted idb');
+            }
+          }
+          await idb.deleteDB(provider.docId);
+        } catch (err) {
+          console.log('idb-persistence error', err);
+        }
+
+        provider.emit('init', []);
+      }
+      /*-------- sb-yy-websocket change end --------*/
+      else {
+        const encoder = readMessage(provider, new Uint8Array(event.data), true);
+        if (encoding.length(encoder) > 1) {
+          websocket.send(encoding.toUint8Array(encoder));
+        }
       }
     };
     websocket.onerror = (event) => {
@@ -188,7 +242,10 @@ const setupWS = (provider) => {
         status: 'connected'
       }]);
 
+      /*-------- sb-yy-websocket change begin --------*/
+      // send auth token when the socket is connected to the yjs-server
       provider.sendAuthToken();
+      /*-------- sb-yy-websocket change end --------*/
 
       // always send sync step 1 when connected
       const encoder = encoding.createEncoder();
@@ -246,6 +303,7 @@ class WebsocketProvider extends observable.Observable {
    * @param {string} serverUrl
    * @param {string} roomname
    * @param {Y.Doc} doc
+   * @param {string} docId
    * @param {object} opts
    * @param {boolean} [opts.connect]
    * @param {awarenessProtocol.Awareness} [opts.awareness]
@@ -255,7 +313,7 @@ class WebsocketProvider extends observable.Observable {
    * @param {number} [opts.maxBackoffTime] Maximum amount of time to wait before trying to reconnect (we try to reconnect using exponential backoff)
    * @param {boolean} [opts.disableBc] Disable cross-tab BroadcastChannel communication
    */
-  constructor(serverUrl, roomname, doc, {
+  constructor(serverUrl, roomname, doc, docId, {
     connect = true,
     awareness = new awarenessProtocol.Awareness(doc),
     params = {},
@@ -277,6 +335,7 @@ class WebsocketProvider extends observable.Observable {
       (encodedParams.length === 0 ? '' : '?' + encodedParams);
     this.roomname = roomname;
     this.doc = doc;
+    this.docId = docId;
     this._WS = WebSocketPolyfill;
     this.awareness = awareness;
     this.wsconnected = false;
@@ -383,27 +442,33 @@ class WebsocketProvider extends observable.Observable {
     if (connect) {
       this.connect();
     }
+    /*-------- sb-yy-websocket change begin --------*/
+    // add props to the WebSocketProvider for auth token handling
     /**
      * @type {string}
      */
     this._authToken = '';
     /**
-     * @type {NodeJS.Timer}
+     * @type {NodeJS.Timer | null}
      */
-    this._authTokenInterval = setInterval(() => { }, 1000 * 1000);
+    this._authTokenInterval = null;
+    /*-------- sb-yy-websocket change end --------*/
   }
 
+  /*-------- sb-yy-websocket change begin --------*/
+  // get, set methods for private prop "_authToken"
   /**
    * @type {string}
    */
   get authToken() {
     return this._authToken
-
   }
   set authToken(token) {
     this._authToken = token;
+    // send auth token to the yjs-server when it's reset
     this.sendAuthToken();
   }
+  /*-------- sb-yy-websocket change end --------*/
 
   /**
    * @type {boolean}
@@ -411,7 +476,6 @@ class WebsocketProvider extends observable.Observable {
   get synced() {
     return this._synced
   }
-
   set synced(state) {
     if (this._synced !== state) {
       this._synced = state;
@@ -420,11 +484,12 @@ class WebsocketProvider extends observable.Observable {
     }
   }
 
+  /*-------- sb-yy-websocket change begin --------*/
+  // method which sends "_authToken" to the yjs-server
   sendAuthToken() {
-    clearInterval(this._authTokenInterval);
+    this._authTokenInterval && clearInterval(this._authTokenInterval);
 
     const token = this._authToken;
-
     const numArr = [];
     for (let i = 0, tokenLength = token.length; i < tokenLength; ++i) {
       numArr.push(token.charCodeAt(i));
@@ -442,14 +507,17 @@ class WebsocketProvider extends observable.Observable {
       this._authTokenInterval = setInterval(() => {
         if (this.wsconnected) {
           this.ws?.send(buffer);
-          clearInterval(this._authTokenInterval);
+          this._authTokenInterval && clearInterval(this._authTokenInterval);
         }
       }, 1 * 1000);
     }
   }
+  /*-------- sb-yy-websocket change end --------*/
 
   destroy() {
-    clearInterval(this._authTokenInterval);
+    /*-------- sb-yy-websocket change begin --------*/
+    this._authTokenInterval && clearInterval(this._authTokenInterval);
+    /*-------- sb-yy-websocket change end --------*/
 
     if (this._resyncInterval !== 0) {
       clearInterval(this._resyncInterval);
@@ -546,6 +614,8 @@ class WebsocketProvider extends observable.Observable {
 exports.WebsocketProvider = WebsocketProvider;
 exports.messageAuth = messageAuth;
 exports.messageAwareness = messageAwareness;
+exports.messageError = messageError;
+exports.messageInit = messageInit;
 exports.messageQueryAwareness = messageQueryAwareness;
 exports.messageSync = messageSync;
 //# sourceMappingURL=y-websocket.cjs.map

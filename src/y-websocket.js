@@ -3,10 +3,10 @@
  */
 
 /* eslint-env browser */
-
 import * as bc from 'lib0/broadcastchannel';
 import * as decoding from 'lib0/decoding';
 import * as encoding from 'lib0/encoding';
+import * as idb from 'lib0/indexeddb.js';
 import * as math from 'lib0/math';
 import { Observable } from 'lib0/observable';
 import * as time from 'lib0/time';
@@ -137,7 +137,7 @@ const setupWS = (provider) => {
     provider.wsconnected = false
     provider.synced = false
 
-    websocket.onmessage = (event) => {
+    websocket.onmessage = async (event) => {
       provider.wsLastMessageReceived = time.getUnixTime()
 
       const buf = new Uint8Array(event.data)
@@ -149,6 +149,42 @@ const setupWS = (provider) => {
         const errorType = String.fromCharCode(...content)
         provider.emit('error', [errorType])
       } else if (messageType === messageInit) {
+        const buf = new Uint8Array(event.data)
+        buf[0] = messageSync
+
+        const encoder = readMessage(provider, buf, false)
+        if (encoding.length(encoder) > 1) {
+          websocket.send(encoding.toUint8Array(encoder))
+        }
+
+        try {
+          let hasOfflineEdits = false
+          const db = await idb.openDB(provider.docId, (_db) => {
+            if (_db.objectStoreNames.length === 1 && _db.objectStoreNames[0] === 'updates') {
+              hasOfflineEdits = true
+            }
+            return _db
+          })
+          if (hasOfflineEdits) {
+            const [updatesStore] = idb.transact(db, ['updates'])
+            const updates = await idb.getAll(updatesStore)
+            if (updates.length !== 0) {
+              updates.forEach(update => {
+                Y.applyUpdate(provider.doc, update)
+
+                const encoder = encoding.createEncoder()
+                encoding.writeVarUint(encoder, messageSync)
+                syncProtocol.writeUpdate(encoder, update)
+                broadcastMessage(provider, encoding.toUint8Array(encoder))
+              })
+              console.log('synced offline edits and deleted idb')
+            }
+          }
+          await idb.deleteDB(provider.docId)
+        } catch (err) {
+          console.log('idb-persistence error', err)
+        }
+
         provider.emit('init', [])
       }
       /*-------- sb-yy-websocket change end --------*/
@@ -264,6 +300,7 @@ export class WebsocketProvider extends Observable {
    * @param {string} serverUrl
    * @param {string} roomname
    * @param {Y.Doc} doc
+   * @param {string} docId
    * @param {object} opts
    * @param {boolean} [opts.connect]
    * @param {awarenessProtocol.Awareness} [opts.awareness]
@@ -273,7 +310,7 @@ export class WebsocketProvider extends Observable {
    * @param {number} [opts.maxBackoffTime] Maximum amount of time to wait before trying to reconnect (we try to reconnect using exponential backoff)
    * @param {boolean} [opts.disableBc] Disable cross-tab BroadcastChannel communication
    */
-  constructor(serverUrl, roomname, doc, {
+  constructor(serverUrl, roomname, doc, docId, {
     connect = true,
     awareness = new awarenessProtocol.Awareness(doc),
     params = {},
@@ -295,6 +332,7 @@ export class WebsocketProvider extends Observable {
       (encodedParams.length === 0 ? '' : '?' + encodedParams)
     this.roomname = roomname
     this.doc = doc
+    this.docId = docId
     this._WS = WebSocketPolyfill
     this.awareness = awareness
     this.wsconnected = false
