@@ -158,26 +158,19 @@ const setupWS = (provider) => {
         }
 
         try {
-          let hasOfflineEdits = false
-          const db = await idb.openDB(provider.docId, (_db) => {
-            if (_db.objectStoreNames.length === 1 && _db.objectStoreNames[0] === 'updates') {
-              hasOfflineEdits = true
-            }
-            return _db
-          })
-          if (hasOfflineEdits) {
-            const [updatesStore] = idb.transact(db, ['updates'])
+          const _db = await idb.openDB(provider.docId, (db) => { })
+          if (_db.objectStoreNames.contains('updates')) {
+            const [updatesStore] = idb.transact(_db, ['updates'])
             const updates = await idb.getAll(updatesStore)
             if (updates.length !== 0) {
               updates.forEach(update => {
-                Y.applyUpdate(provider.doc, update)
-
                 const encoder = encoding.createEncoder()
                 encoding.writeVarUint(encoder, messageSync)
                 syncProtocol.writeUpdate(encoder, update)
-                broadcastMessage(provider, encoding.toUint8Array(encoder))
+                const buf = encoding.toUint8Array(encoder)
+                broadcastMessage(provider, buf)
               })
-              console.log('synced offline edits and deleted idb')
+              console.log('synced offline edits')
             }
           }
           await idb.deleteDB(provider.docId)
@@ -394,7 +387,8 @@ export class WebsocketProvider extends Observable {
         const encoder = encoding.createEncoder()
         encoding.writeVarUint(encoder, messageSync)
         syncProtocol.writeUpdate(encoder, update)
-        broadcastMessage(this, encoding.toUint8Array(encoder))
+        const buf = encoding.toUint8Array(encoder)
+        broadcastMessage(this, buf)
       }
     }
     this.doc.on('update', this._updateHandler)
