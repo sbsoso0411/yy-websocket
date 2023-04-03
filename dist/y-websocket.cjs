@@ -159,7 +159,6 @@ const setupWS = (provider) => {
         if (encoding.length(encoder) > 1) {
           websocket.send(encoding.toUint8Array(encoder));
         }
-
         try {
           const _db = await idb.openDB(provider.docId, (db) => { });
           if (_db.objectStoreNames.contains('updates')) {
