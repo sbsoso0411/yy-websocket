@@ -5,7 +5,7 @@ Object.defineProperty(exports, '__esModule', { value: true });
 var bc = require('lib0/dist/broadcastchannel.cjs');
 var decoding = require('lib0/dist/decoding.cjs');
 var encoding = require('lib0/dist/encoding.cjs');
-require('lib0/dist/indexeddb.js.cjs');
+var idb = require('lib0/dist/indexeddb.js.cjs');
 var math = require('lib0/dist/math.cjs');
 var observable = require('lib0/dist/observable.cjs');
 var time = require('lib0/dist/time.cjs');
@@ -13,7 +13,7 @@ var url = require('lib0/dist/url.cjs');
 var authProtocol = require('y-protocols/dist/auth.cjs');
 var awarenessProtocol = require('y-protocols/dist/awareness.cjs');
 var syncProtocol = require('y-protocols/dist/sync.cjs');
-require('yjs');
+var Y = require('yjs');
 
 /**
  * @module provider/websocket
@@ -205,7 +205,7 @@ const setupWS = (provider) => {
         provider
       );
     };
-    websocket.onopen = () => {
+    websocket.onopen = async () => {
       provider.wsLastMessageReceived = time.getUnixTime();
       provider.wsconnecting = false;
       provider.wsconnected = true;
@@ -215,8 +215,31 @@ const setupWS = (provider) => {
       }]);
 
       /*-------- sb-yy-websocket change begin --------*/
-      // send auth token when the socket is connected to the yjs-server
-      provider.sendAuthToken();
+      // idb-persistence - disable
+      /**
+       * @type {Uint8Array | undefined}
+       */
+      let offlineEdit = undefined;
+      try {
+        const _db = await idb.openDB(provider.docId, (db) => { });
+        if (_db.objectStoreNames.contains('updates')) {
+          const [updatesStore] = idb.transact(_db, ['updates']);
+          const offlineEdits = await idb.getAll(updatesStore);
+          // sync offline edits
+          const offDoc = new Y.Doc();
+          offDoc.transact(() => {
+            offlineEdits.map(_offlineEdit => {
+              Y.applyUpdate(offDoc, _offlineEdit);
+            });
+          });
+          offlineEdit = Y.encodeStateAsUpdate(offDoc);
+        }
+        await idb.deleteDB(provider.docId);
+      } catch (err) {
+        console.log('idb-persistence error', err);
+      }
+      // send auth message when the socket is connected to the yjs-server
+      provider.sendAuthToken(offlineEdit);
       /*-------- sb-yy-websocket change end --------*/
 
       // always send sync step 1 when connected
@@ -439,7 +462,7 @@ class WebsocketProvider extends observable.Observable {
   set authToken(token) {
     this._authToken = token;
     // send auth token to the yjs-server when it's reset
-    this.sendAuthToken();
+    this.wsconnected && this.sendAuthToken();
   }
   /*-------- sb-yy-websocket change end --------*/
 
@@ -459,31 +482,28 @@ class WebsocketProvider extends observable.Observable {
 
   /*-------- sb-yy-websocket change begin --------*/
   // method which sends "_authToken" to the yjs-server
-  sendAuthToken() {
-    this._authTokenInterval && clearInterval(this._authTokenInterval);
-
+  /**
+   * @param {Uint8Array | undefined} [offlineEdit]
+   */
+  sendAuthToken(offlineEdit) {
     const token = this._authToken;
+    const tokenLength = token.length;
     const numArr = [];
-    for (let i = 0, tokenLength = token.length; i < tokenLength; ++i) {
+    for (let i = 0; i < tokenLength; ++i) {
       numArr.push(token.charCodeAt(i));
     }
-    const uint8Arr = Uint8Array.from(numArr);
+
+    const tokenLengthBuffer = Uint8Array.from([tokenLength]);
+    const tokenBuffer = Uint8Array.from(numArr);
+    const offlineEditBuffer = Uint8Array.from(offlineEdit || []);
+    const msgBuffer = Uint8Array.from(Array.prototype.concat(tokenLengthBuffer, tokenBuffer, offlineEditBuffer));
 
     const encoder = encoding.createEncoder();
     encoding.writeVarUint(encoder, messageAuth);
-    encoding.writeVarUint8Array(encoder, uint8Arr);
+    encoding.writeVarUint8Array(encoder, msgBuffer);
     const buffer = encoding.toUint8Array(encoder);
 
-    if (this.wsconnected) {
-      this.ws?.send(buffer);
-    } else {
-      this._authTokenInterval = setInterval(() => {
-        if (this.wsconnected) {
-          this.ws?.send(buffer);
-          this._authTokenInterval && clearInterval(this._authTokenInterval);
-        }
-      }, 1 * 1000);
-    }
+    this.ws?.send(buffer);
   }
   /*-------- sb-yy-websocket change end --------*/
 

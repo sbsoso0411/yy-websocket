@@ -118,7 +118,10 @@ export class WebsocketProvider extends Observable<string> {
      * @type {boolean}
      */
     get synced(): boolean;
-    sendAuthToken(): void;
+    /**
+     * @param {Uint8Array | undefined} [offlineEdit]
+     */
+    sendAuthToken(offlineEdit?: Uint8Array | undefined): void;
     connectBc(): void;
     disconnectBc(): void;
     disconnect(): void;
