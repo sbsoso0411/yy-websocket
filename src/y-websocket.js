@@ -156,25 +156,29 @@ const setupWS = (provider) => {
         if (encoding.length(encoder) > 1) {
           websocket.send(encoding.toUint8Array(encoder))
         }
-        try {
-          const _db = await idb.openDB(provider.docId, (db) => { })
-          if (_db.objectStoreNames.contains('updates')) {
-            const [updatesStore] = idb.transact(_db, ['updates'])
-            const updates = await idb.getAll(updatesStore)
-            if (updates.length !== 0) {
-              updates.forEach(update => {
-                const encoder = encoding.createEncoder()
-                encoding.writeVarUint(encoder, messageSync)
-                syncProtocol.writeUpdate(encoder, update)
-                const buf = encoding.toUint8Array(encoder)
-                broadcastMessage(provider, buf)
-              })
-              console.log('synced offline edits')
+
+        if (false) {
+          // idb-persistence - disable
+          try {
+            const _db = await idb.openDB(provider.docId, (db) => { })
+            if (_db.objectStoreNames.contains('updates')) {
+              const [updatesStore] = idb.transact(_db, ['updates'])
+              const updates = await idb.getAll(updatesStore)
+              if (updates.length !== 0) {
+                updates.forEach(update => {
+                  const encoder = encoding.createEncoder()
+                  encoding.writeVarUint(encoder, messageSync)
+                  syncProtocol.writeUpdate(encoder, update)
+                  const buf = encoding.toUint8Array(encoder)
+                  broadcastMessage(provider, buf)
+                })
+                console.log('synced offline edits')
+              }
             }
+            await idb.deleteDB(provider.docId)
+          } catch (err) {
+            console.log('idb-persistence error', err)
           }
-          await idb.deleteDB(provider.docId)
-        } catch (err) {
-          console.log('idb-persistence error', err)
         }
 
         provider.emit('init', [])
