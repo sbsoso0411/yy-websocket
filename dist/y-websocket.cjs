@@ -5,7 +5,7 @@ Object.defineProperty(exports, '__esModule', { value: true });
 var bc = require('lib0/dist/broadcastchannel.cjs');
 var decoding = require('lib0/dist/decoding.cjs');
 var encoding = require('lib0/dist/encoding.cjs');
-var idb = require('lib0/dist/indexeddb.js.cjs');
+require('lib0/dist/indexeddb.js.cjs');
 var math = require('lib0/dist/math.cjs');
 var observable = require('lib0/dist/observable.cjs');
 var time = require('lib0/dist/time.cjs');
@@ -158,26 +158,6 @@ const setupWS = (provider) => {
         const encoder = readMessage(provider, buf, false);
         if (encoding.length(encoder) > 1) {
           websocket.send(encoding.toUint8Array(encoder));
-        }
-        try {
-          const _db = await idb.openDB(provider.docId, (db) => { });
-          if (_db.objectStoreNames.contains('updates')) {
-            const [updatesStore] = idb.transact(_db, ['updates']);
-            const updates = await idb.getAll(updatesStore);
-            if (updates.length !== 0) {
-              updates.forEach(update => {
-                const encoder = encoding.createEncoder();
-                encoding.writeVarUint(encoder, messageSync);
-                syncProtocol.writeUpdate(encoder, update);
-                const buf = encoding.toUint8Array(encoder);
-                broadcastMessage(provider, buf);
-              });
-              console.log('synced offline edits');
-            }
-          }
-          await idb.deleteDB(provider.docId);
-        } catch (err) {
-          console.log('idb-persistence error', err);
         }
 
         provider.emit('init', []);
