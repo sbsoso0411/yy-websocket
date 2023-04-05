@@ -22,7 +22,6 @@ export class WebsocketProvider extends Observable<string> {
      * @param {string} serverUrl
      * @param {string} roomname
      * @param {Y.Doc} doc
-     * @param {string} docId
      * @param {object} opts
      * @param {boolean} [opts.connect]
      * @param {awarenessProtocol.Awareness} [opts.awareness]
@@ -32,7 +31,7 @@ export class WebsocketProvider extends Observable<string> {
      * @param {number} [opts.maxBackoffTime] Maximum amount of time to wait before trying to reconnect (we try to reconnect using exponential backoff)
      * @param {boolean} [opts.disableBc] Disable cross-tab BroadcastChannel communication
      */
-    constructor(serverUrl: string, roomname: string, doc: Y.Doc, docId: string, { connect, awareness, params, WebSocketPolyfill, resyncInterval, maxBackoffTime, disableBc }?: {
+    constructor(serverUrl: string, roomname: string, doc: Y.Doc, { connect, awareness, params, WebSocketPolyfill, resyncInterval, maxBackoffTime, disableBc }?: {
         connect: boolean;
         awareness: awarenessProtocol.Awareness;
         params: {
@@ -48,7 +47,6 @@ export class WebsocketProvider extends Observable<string> {
     url: string;
     roomname: string;
     doc: Y.Doc;
-    docId: string;
     _WS: {
         new (url: string, protocols?: string | string[] | undefined): WebSocket;
         prototype: WebSocket;
@@ -104,10 +102,6 @@ export class WebsocketProvider extends Observable<string> {
      * @type {string}
      */
     _authToken: string;
-    /**
-     * @type {NodeJS.Timer | null}
-     */
-    _authTokenInterval: NodeJS.Timer | null;
     set authToken(arg: string);
     /**
      * @type {string}
@@ -118,10 +112,7 @@ export class WebsocketProvider extends Observable<string> {
      * @type {boolean}
      */
     get synced(): boolean;
-    /**
-     * @param {Uint8Array | undefined} [offlineEdit]
-     */
-    sendAuthToken(offlineEdit?: Uint8Array | undefined): void;
+    sendAuthToken(): void;
     connectBc(): void;
     disconnectBc(): void;
     disconnect(): void;

@@ -5,7 +5,6 @@ Object.defineProperty(exports, '__esModule', { value: true });
 var bc = require('lib0/dist/broadcastchannel.cjs');
 var decoding = require('lib0/dist/decoding.cjs');
 var encoding = require('lib0/dist/encoding.cjs');
-var idb = require('lib0/dist/indexeddb.js.cjs');
 var math = require('lib0/dist/math.cjs');
 var observable = require('lib0/dist/observable.cjs');
 var time = require('lib0/dist/time.cjs');
@@ -13,7 +12,7 @@ var url = require('lib0/dist/url.cjs');
 var authProtocol = require('y-protocols/dist/auth.cjs');
 var awarenessProtocol = require('y-protocols/dist/awareness.cjs');
 var syncProtocol = require('y-protocols/dist/sync.cjs');
-var Y = require('yjs');
+require('yjs');
 
 /**
  * @module provider/websocket
@@ -215,31 +214,7 @@ const setupWS = (provider) => {
       }]);
 
       /*-------- sb-yy-websocket change begin --------*/
-      // idb-persistence - disable
-      /**
-       * @type {Uint8Array | undefined}
-       */
-      let offlineEdit = undefined;
-      try {
-        const _db = await idb.openDB(provider.docId, (db) => { });
-        if (_db.objectStoreNames.contains('updates')) {
-          const [updatesStore] = idb.transact(_db, ['updates']);
-          const offlineEdits = await idb.getAll(updatesStore);
-          // sync offline edits
-          const offDoc = new Y.Doc();
-          offDoc.transact(() => {
-            offlineEdits.map(_offlineEdit => {
-              Y.applyUpdate(offDoc, _offlineEdit);
-            });
-          });
-          offlineEdit = Y.encodeStateAsUpdate(offDoc);
-        }
-        await idb.deleteDB(provider.docId);
-      } catch (err) {
-        console.log('idb-persistence error', err);
-      }
-      // send auth message when the socket is connected to the yjs-server
-      provider.sendAuthToken(offlineEdit);
+      provider.sendAuthToken();
       /*-------- sb-yy-websocket change end --------*/
 
       // always send sync step 1 when connected
@@ -298,7 +273,6 @@ class WebsocketProvider extends observable.Observable {
    * @param {string} serverUrl
    * @param {string} roomname
    * @param {Y.Doc} doc
-   * @param {string} docId
    * @param {object} opts
    * @param {boolean} [opts.connect]
    * @param {awarenessProtocol.Awareness} [opts.awareness]
@@ -308,7 +282,7 @@ class WebsocketProvider extends observable.Observable {
    * @param {number} [opts.maxBackoffTime] Maximum amount of time to wait before trying to reconnect (we try to reconnect using exponential backoff)
    * @param {boolean} [opts.disableBc] Disable cross-tab BroadcastChannel communication
    */
-  constructor(serverUrl, roomname, doc, docId, {
+  constructor(serverUrl, roomname, doc, {
     connect = true,
     awareness = new awarenessProtocol.Awareness(doc),
     params = {},
@@ -330,7 +304,6 @@ class WebsocketProvider extends observable.Observable {
       (encodedParams.length === 0 ? '' : '?' + encodedParams);
     this.roomname = roomname;
     this.doc = doc;
-    this.docId = docId;
     this._WS = WebSocketPolyfill;
     this.awareness = awareness;
     this.wsconnected = false;
@@ -439,20 +412,14 @@ class WebsocketProvider extends observable.Observable {
       this.connect();
     }
     /*-------- sb-yy-websocket change begin --------*/
-    // add props to the WebSocketProvider for auth token handling
     /**
      * @type {string}
      */
     this._authToken = '';
-    /**
-     * @type {NodeJS.Timer | null}
-     */
-    this._authTokenInterval = null;
     /*-------- sb-yy-websocket change end --------*/
   }
 
   /*-------- sb-yy-websocket change begin --------*/
-  // get, set methods for private prop "_authToken"
   /**
    * @type {string}
    */
@@ -461,7 +428,6 @@ class WebsocketProvider extends observable.Observable {
   }
   set authToken(token) {
     this._authToken = token;
-    // send auth token to the yjs-server when it's reset
     this.wsconnected && this.sendAuthToken();
   }
   /*-------- sb-yy-websocket change end --------*/
@@ -481,26 +447,18 @@ class WebsocketProvider extends observable.Observable {
   }
 
   /*-------- sb-yy-websocket change begin --------*/
-  // method which sends "_authToken" to the yjs-server
-  /**
-   * @param {Uint8Array | undefined} [offlineEdit]
-   */
-  sendAuthToken(offlineEdit) {
+  sendAuthToken() {
     const token = this._authToken;
     const tokenLength = token.length;
     const numArr = [];
     for (let i = 0; i < tokenLength; ++i) {
       numArr.push(token.charCodeAt(i));
     }
-
-    const tokenLengthBuffer = Uint8Array.from([tokenLength]);
     const tokenBuffer = Uint8Array.from(numArr);
-    const offlineEditBuffer = Uint8Array.from(offlineEdit || []);
-    const msgBuffer = Uint8Array.from(Array.prototype.concat(tokenLengthBuffer, tokenBuffer, offlineEditBuffer));
 
     const encoder = encoding.createEncoder();
     encoding.writeVarUint(encoder, messageAuth);
-    encoding.writeVarUint8Array(encoder, msgBuffer);
+    encoding.writeVarUint8Array(encoder, tokenBuffer);
     const buffer = encoding.toUint8Array(encoder);
 
     this.ws?.send(buffer);
@@ -508,10 +466,6 @@ class WebsocketProvider extends observable.Observable {
   /*-------- sb-yy-websocket change end --------*/
 
   destroy() {
-    /*-------- sb-yy-websocket change begin --------*/
-    this._authTokenInterval && clearInterval(this._authTokenInterval);
-    /*-------- sb-yy-websocket change end --------*/
-
     if (this._resyncInterval !== 0) {
       clearInterval(this._resyncInterval);
     }
