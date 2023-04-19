@@ -98,9 +98,6 @@ messageHandlers[messageAuth] = (
   );
 };
 
-// @todo - this should depend on awareness.outdatedTime
-const messageReconnectTimeout = 30000;
-
 /**
  * @param {WebsocketProvider} provider
  * @param {string} reason
@@ -397,17 +394,6 @@ class WebsocketProvider extends observable.Observable {
       process.on('exit', this._unloadHandler);
     }
     awareness.on('update', this._awarenessUpdateHandler);
-    this._checkInterval = /** @type {any} */ (setInterval(() => {
-      if (
-        this.wsconnected &&
-        messageReconnectTimeout <
-        time.getUnixTime() - this.wsLastMessageReceived
-      ) {
-        // no message received in a long time - not even your own awareness
-        // updates (which are updated every 15 seconds)
-        /** @type {WebSocket} */ (this.ws).close();
-      }
-    }, messageReconnectTimeout / 10));
     if (connect) {
       this.connect();
     }
@@ -469,7 +455,6 @@ class WebsocketProvider extends observable.Observable {
     if (this._resyncInterval !== 0) {
       clearInterval(this._resyncInterval);
     }
-    clearInterval(this._checkInterval);
     this.disconnect();
     if (typeof window !== 'undefined') {
       window.removeEventListener('unload', this._unloadHandler);

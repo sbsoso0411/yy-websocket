@@ -97,7 +97,6 @@ export class WebsocketProvider extends Observable<string> {
      */
     _awarenessUpdateHandler: ({ added, updated, removed }: any, _origin: any) => void;
     _unloadHandler: () => void;
-    _checkInterval: any;
     /**
      * @type {string}
      */
