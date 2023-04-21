@@ -286,7 +286,7 @@ class WebsocketProvider extends observable.Observable {
     WebSocketPolyfill = WebSocket,
     resyncInterval = -1,
     maxBackoffTime = 2500,
-    disableBc = false
+    disableBc = true
   } = {}) {
     super();
 

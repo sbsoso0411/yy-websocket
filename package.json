@@ -1,6 +1,6 @@
 {
   "name": "sb-yy-websocket",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "description": "Websockets provider for Yjs with provides auth_token interaction",
   "main": "./dist/y-websocket.cjs",
   "module": "./src/y-websocket.js",

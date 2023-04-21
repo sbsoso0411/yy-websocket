@@ -286,7 +286,7 @@ export class WebsocketProvider extends Observable {
     WebSocketPolyfill = WebSocket,
     resyncInterval = -1,
     maxBackoffTime = 2500,
-    disableBc = false
+    disableBc = true
   } = {}) {
     super()
 
